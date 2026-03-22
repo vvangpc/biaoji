@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>专利附图标记智能排版引擎</title>
+    <title>专利附图标记智能排版</title>
     <style>
         :root {
             --primary-color: #00bfa5; /* 现代青金石绿 */
@@ -297,19 +297,19 @@
     <div class="title">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
-                <h1>专利附图标记智能排版引擎</h1>
+                <h1>专利附图标记智能排版</h1>
                 <p>极简操控，智能双向解析，全自动覆盖转换格式，拒绝手动校对。</p>
             </div>
-            <button class="action-link" onclick="clearT1()" style="margin-top: 6px;">🗑️ 清空字典缓存</button>
+            <button class="action-link" onclick="clearT1()" style="margin-top: 6px;">🗑️ 清空标记说明</button>
         </div>
-        <span>📌 请输入标记字典定义格式（支持任意符号连接）：</span>
-        <p>1、转子引擎，2-燃烧室，3 外壳A，24.活塞 （引擎将利用正则强力识别所有包含数字与汉字组合的键值）</p>
+        <span>📌 请输入标记说明（支持任意符号连接）：</span>
+        <p>1、转子引擎，2-燃烧室，3 外壳A，24.活塞 ……</p>
     </div>
 
     <div class="content-wrapper">
         <!-- 顶部输入区 -->
         <div class="input-section">
-            <textarea name="t1" id="t1" placeholder="在此输入标记定义，例如：1、控制模块，2、信号接收器... （您的输入将加密保存在本地浏览器中）"></textarea>
+            <textarea name="t1" id="t1" placeholder="在此输入标记定义（您的输入将加密保存在本地浏览器中）"></textarea>
         </div>
 
         <!-- 下方主要内容区 -->
@@ -318,6 +318,7 @@
             <div class="text-panel">
                 <div class="panel-header">
                     <span class="tag">📝 原文工作区</span>
+                    <button class="action-link" onclick="clearT2()">🗑️ 清空原文</button>
                 </div>
                 <textarea name="t2" id="t2" placeholder="在此粘贴需要处理的原始专利段落..."></textarea>
             </div>
@@ -331,14 +332,17 @@
                 <button onclick="init(5)">权利要求 ⇒ 发明内容</button>
                 <button onclick="init(6)">权利要求 ⇒ 实施例</button>
                 
-                <button class="extract-btn" onclick="extractMarks()">实施例 ⇒ 提取回填字典</button>
+                <button class="extract-btn" onclick="extractMarks()">实施例 ⇒ 提取标记说明</button>
             </div>
 
             <!-- 右侧生成 -->
             <div class="text-panel">
                 <div class="panel-header">
                     <span class="tag">✨ 编译输出区</span>
-                    <button class="action-link" onclick="copyT3(this)">✨ 一键复制</button>
+                    <div>
+                        <button class="action-link" onclick="clearT3()" style="margin-right: 8px;">🗑️ 清空输出</button>
+                        <button class="action-link" onclick="copyT3(this)">✨ 一键复制</button>
+                    </div>
                 </div>
                 <textarea name="t3" id="t3" placeholder="编译完毕的转换结果将在此实时呈现..." readonly></textarea>
             </div>
@@ -373,11 +377,21 @@
 
         // --- 清理机制 ---
         function clearT1() {
-            if(confirm('警告：是否确定清空顶部附图标记字典的数据？')) {
+            if(confirm('警告：是否确定清空顶部标记说明的数据？')) {
                 document.getElementById('t1').value = '';
                 localStorage.removeItem('t1_cache');
-                showToast("字典缓存已被深度清理", "success");
+                showToast("标记说明已被清空", "success");
             }
+        }
+
+        function clearT2() {
+            document.getElementById('t2').value = '';
+            showToast("已清空原文工作区", "success");
+        }
+
+        function clearT3() {
+            document.getElementById('t3').value = '';
+            showToast("已清空输出区", "success");
         }
 
         // --- 复制机制 ---
@@ -411,8 +425,8 @@
                 return;
             }
             
-            // 匹配"连续中文+纯数字" 的固定排列形态
-            const regex = /([\u4e00-\u9fa5]{1,15})(\d+)/g;
+            // 匹配"连续中文或字母+纯数字" 的固定排列形态
+            const regex = /([\u4e00-\u9fa5a-zA-Z]{1,20})(\d+)/g;
             let match;
             const marksData = {}; 
             
@@ -420,8 +434,8 @@
                 let name = match[1];
                 const num = parseInt(match[2], 10);
                 
-                // 去除毫无关联的介词前缀和定语
-                name = name.replace(/^(所述|该|此|及|和|与|的|以及|图|包括|连接)/g, '');
+                // 去除所有连续堆叠的介词前缀和定语
+                name = name.replace(/^(所述|该|此|及|和|与|的|以及|图|包括|连接)+/g, '');
                 
                 if (name && name.length >= 1) {
                     if (!marksData[num]) marksData[num] = name;
@@ -460,26 +474,33 @@
             if(!t1.trim()) { showToast("字典库缺失：请先配置顶部附图标记！", "error"); return; }
             if(!t2.trim()) { showToast("原料缺失：请填入需处理的原文！", "error"); return; }
 
-            const arr1 = [], arr2 = [], arr3 = [];
+            const arr1 = [], arr2 = [], arr3 = [], arr3Half = [];
             
-            // 更为宽松容错的词法解析机制
-            const parseRegex = /(\d+)[\s、.，,；;\-|\|]*([\u4e00-\u9fa5a-zA-Z]{1,20})/g;
+            // 增强版双向词法解析机制：支持“数字+名称”和“名称+数字”
+            const parseRegex = /(\d+)[\s、.，,；;\-:：|]*([\u4e00-\u9fa5a-zA-Z]+)|([\u4e00-\u9fa5a-zA-Z]+)[\s、.，,；;\-:：|]*(\d+)/g;
             let matchObj, foundCount = 0;
             
             while ((matchObj = parseRegex.exec(t1)) !== null) {
-                const num = matchObj[1];
-                const name = matchObj[2].trim();
+                let num, name;
+                if (matchObj[1] && matchObj[2]) {
+                    num = matchObj[1];
+                    name = matchObj[2].trim();
+                } else if (matchObj[3] && matchObj[4]) {
+                    name = matchObj[3].trim();
+                    num = matchObj[4];
+                }
                 
                 if (name) {
                     arr1.push(name);
                     arr2.push(name + num);
                     arr3.push(name + '（' + num + '）');
+                    arr3Half.push(name + '(' + num + ')'); // 追加半角支持
                     foundCount++;
                 }
             }
 
             if (foundCount === 0) {
-                showToast("致命排版错误：该字典片段未被识别！", "error");
+                showToast("致命排版错误：该标记说明片段未能被识别！", "error");
                 return;
             }
             
@@ -504,8 +525,18 @@
                     break;
                 case 3: replaceDict = createDict(arr2, arr1); break;
                 case 4: replaceDict = createDict(arr2, arr3); break;
-                case 5: replaceDict = createDict(arr3, arr1); break;
-                case 6: replaceDict = createDict(arr3, arr2); break;
+                case 5: 
+                    for(let i = 0; i < arr3.length; i++) {
+                        replaceDict[arr3[i]] = arr1[i];
+                        replaceDict[arr3Half[i]] = arr1[i]; // 全半角兼容
+                    }
+                    break;
+                case 6: 
+                    for(let i = 0; i < arr3.length; i++) {
+                        replaceDict[arr3[i]] = arr2[i];
+                        replaceDict[arr3Half[i]] = arr2[i]; // 全半角兼容
+                    }
+                    break;
             }
 
             // 投递进入转换栈
